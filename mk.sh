@@ -5,5 +5,5 @@ img2=konata_640x480.jpg
 img3=eva_900x645.jpg
 img4=cat_450x450.jpeg
 
-gcc jfif_dump.c 
-./a.out Images/$img4
+# gcc jfif_dump.c && ./a.out Images/$img4
+gcc huffman.c && ./a.out

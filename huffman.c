@@ -48,7 +48,7 @@
 typedef struct codeobj {
     unsigned char c;
     unsigned char length; // Length == depth in tree 
-    short val;
+    unsigned short val;
 } CodeObj;
 
 typedef struct freqobj {
@@ -277,8 +277,7 @@ unsigned char *get_code_counts(CodeObj *code_arr[], const int size)
     return counts;
 }
 
-// Maybe change it so that we save lengths to code_arr
-int get_code_lens_from_counts(CodeObj *code_arr[], int *code_counts)
+int get_code_lens_from_counts(CodeObj *code_arr[], char *code_counts)
 {
     int index = 0;
     for (int i = 0; i < MAX_CODE_LEN; ++i) {
@@ -343,9 +342,9 @@ int encode(char *f_ouput, char *input, int input_size)
     sort_code_arr_by_len(code_arr, code_arr_size, dummy);
     get_code_vals(code_arr, code_arr_size);
     /* get rid of last value that's the last element (we know it from sort array) */
-    free(code_arr[--code_arr_size]);
+    // free(code_arr[--code_arr_size]);
     /* bring back original input */
-    input[input_size-1] = '\0';
+    // input[input_size-1] = '\0';
     unsigned char *code_counts = get_code_counts(code_arr, code_arr_size);
 
     FILE *fp_dst = fopen(f_ouput, "wb");
@@ -444,6 +443,126 @@ int encode(char *f_ouput, char *input, int input_size)
     return 0;
 }
 
+char* decode(char *f_in)
+{
+    FILE *fp_in = fopen(f_in, "rb");
+
+    /* Read code counts */
+    char code_counts[MAX_CODE_LEN];
+    fread(code_counts, 1, MAX_CODE_LEN, fp_in);
+
+    /* Read and save char table */
+    int table_size = 0;
+    for (int i = 0; i < MAX_CODE_LEN; i++) {
+        table_size += code_counts[i];
+    } 
+    char char_table[table_size];
+    fread(char_table, 1, table_size, fp_in);
+    CodeObj *codes[table_size];
+    for (int i = 0; i < table_size; i++) {
+        codes[i] = malloc(sizeof(CodeObj));
+        codes[i]->c = char_table[i];
+    }
+
+    /* Get code values */
+    get_code_lens_from_counts(codes, code_counts);
+    get_code_vals(codes, table_size);
+
+    /* Decode */
+    /* 1. Create decode helper object */
+    int max_len = MAX_CODE_LEN;
+    for (int i = MAX_CODE_LEN; i > 0; i--) {
+        if (code_counts[i-1]) {
+            max_len = i;
+            break;
+        }
+    }
+    
+    typedef struct decodeobj {
+        int len;
+        unsigned short int min_code;
+        unsigned short int max_code;
+        int first_val_index;
+    } DecodeObj;
+
+    DecodeObj DecodeObj_arr[max_len];
+    
+    for (int i = 0; i < max_len; i++) {
+        DecodeObj_arr[i].len = i+1;
+        if (code_counts[i]) {
+            for (int j = 0; j < table_size; j++) {
+                if (codes[j]->length == i+1) {
+                    DecodeObj_arr[i].first_val_index = j;
+                    DecodeObj_arr[i].min_code        = codes[j]->val;
+                    DecodeObj_arr[i].max_code        = codes[j+code_counts[i]-1]->val;
+                    break;
+                }
+            }
+            
+        } else {
+            DecodeObj_arr[i].first_val_index = -1;
+            DecodeObj_arr[i].min_code        = -1;
+            DecodeObj_arr[i].max_code        = -1;
+        }
+    }
+    
+    /* 2. Read compressed data and decode*/
+    unsigned short int decode_val = 0;
+    char *decompressed_data = malloc(0xFFFFF); // Assigning a buffor of 1MB just to be sure I read everything
+    char not_finished = 1;
+    int data_size = 0;
+    int decode_len = 0;
+    while (not_finished) {
+        unsigned char c = fgetc(fp_in);
+        for (int i = 7; i >= 0; i--) {
+            decode_val |= (c >> i) & 1;
+            DecodeObj check_decode = DecodeObj_arr[decode_len];
+            if (check_decode.first_val_index != -1 && \
+                check_decode.min_code <= decode_val && \
+                check_decode.max_code >= decode_val) {
+                if (decode_val == codes[table_size-1]->val) {
+                    not_finished = 0;
+                    break;
+                }
+                int diff = decode_val - check_decode.min_code; 
+                decompressed_data[data_size++] = char_table[check_decode.first_val_index + diff];
+                decode_len = 0;
+                decode_val = 0;
+            } else {
+                decode_val <<= 1;
+                decode_len++;
+            }
+        }
+    }
+
+    #if HUFFMAN_DEBUG == 1
+    for (int i = 0; i < table_size; i++)
+    {
+        printf("%c %d ", codes[i]->c, codes[i]->length);
+        _print_code_val(codes[i]->val, codes[i]->length);
+        printf("\n");
+    }
+    for (int i = 0; i < max_len; i++)
+    {
+        printf("Len: %d, first_index: %d, min_val: ", DecodeObj_arr[i].len, DecodeObj_arr[i].first_val_index);
+        (DecodeObj_arr[i].first_val_index == -1) ? printf("-1, ") : _print_code_val(DecodeObj_arr[i].min_code, DecodeObj_arr[i].len);
+        printf(", max_val: ");
+        (DecodeObj_arr[i].first_val_index == -1) ? printf("max_val: -1") : _print_code_val(DecodeObj_arr[i].max_code, DecodeObj_arr[i].len);
+        printf("\n");
+    }
+    for (int i = 0; i < data_size; i++)
+    {
+        printf("%c", decompressed_data[i]);
+    }
+    printf("\n");
+    #endif
+    
+
+    /* Clear */
+    fclose(fp_in);
+    return decompressed_data;
+}
+
 int main()
 {
     char *input = "A MAN A PLAN A CANAL PANAMA";
@@ -453,6 +572,8 @@ int main()
     while (input[input_size++] != '\0');
 
     encode(f_out, input, input_size);
+    char *decompressed_data = decode(f_out);
 
+    free(decompressed_data);
     return 0;
 }
