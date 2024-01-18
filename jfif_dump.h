@@ -2,6 +2,8 @@
 #define JFIF_DUMP_H
 
 #include "stdlib.h"
+#include "stdio.h"
+#include "huffman.h"
 
 #define APPEND_LIST(OBJ, OBJ_TYPE, MARKER_TYPE, NEW_STRUCT) do { \
             OBJ_TYPE *ptr = OBJ->next;                           \
@@ -14,7 +16,15 @@
         } while (0);
 
 #define CONSOLE_OUT 1
-#define DEBUG_OUT 0
+#define JFIF_DBUG 0
+
+/*****************
+*   PROTOTYPES   *
+*****************/
+
+extern char* decode(char *f_in);
+extern char* decompress_data(FILE *fp_in, char char_table[], CodeObj *codes[], char code_counts[], int table_size);
+extern void print_code_val(unsigned int val, int len);
 
 /************
 *   TYPES   *
@@ -70,16 +80,6 @@ typedef struct sos {
     B08 succApprox;
     B32 dataLen;
 } SOS;
-
-typedef struct node {
-    void *data;
-    struct node *next;
-} Node;
-
-typedef struct list {
-    int size;
-    Node *head;
-} List;
 
 /**************
 *   GLOBALS   *
@@ -148,48 +148,6 @@ struct sof {
 /****************
 *   FUNCTIONS   *
 ****************/
-
-List *create_list()
-{
-    List *new_list = (List*)malloc(sizeof(List));
-    new_list->size = 0;
-    new_list->head = NULL;
-    return new_list;
-}
-
-void append(List *list, void *data)
-{
-    Node *new_head = (Node*)malloc(sizeof(Node));
-    new_head->data = data;
-    new_head->next = list->head;
-    list->head = new_head;
-    list->size++;
-}
-
-void *pop(List *list)
-{
-    if (list->size == 0) {
-        return NULL;
-    }
-    Node *pop_node = list->head;
-    void *pop_data = pop_node->data;
-    list->head = pop_node->next;
-    free(pop_node);
-    list->size--;
-    return pop_data;
-}
-
-void *at(List *list, int index)
-{
-    if (index >= list->size || index < 0) {
-        return 0;
-    }
-    Node *i_node = list->head;
-    for (int i = 1; i < (list->size-index); ++i) {
-        i_node = i_node->next;
-    }
-    return i_node->data;
-}
 
 void printb(B08 *c, int n, int tabs, int width)
 {
@@ -648,14 +606,14 @@ int handle_marker(FILE *fp_jfif, B08 marker, int *data_pos)
         case 0xC4: // DHT
             DHT *mr_DHT = (DHT*)malloc(sizeof(DHT));
             mr_DHT->marker = marker;
-            append(DHT_list, mr_DHT);
+            list_append(DHT_list, mr_DHT);
             init_DHT(fp_jfif, mr_DHT, len);
             break;
 
         case 0xDA: // SOS
             SOS *mr_SOS = (SOS*)malloc(sizeof(SOS));
             mr_SOS->marker = marker;
-            append(SOS_list, mr_SOS);
+            list_append(SOS_list, mr_SOS);
             init_SOS(fp_jfif, mr_SOS, len);
             break;
 
@@ -683,6 +641,36 @@ int handle_marker(FILE *fp_jfif, B08 marker, int *data_pos)
             printf("%02x marker undefined.\n", marker);
             return 1;
     }
+    return 0;
+}
+
+int handle_loop(char* filename)
+{
+    SOS_list = list_create();
+    DHT_list = list_create();
+
+    int r, data_pos;
+    unsigned char byte;
+    FILE *fp_jfif = fopen(filename, "rb");
+    data_pos = 0;
+
+    while (1) { // Loop till EOI
+        byte = fgetc(fp_jfif);
+        if (byte == 0xFF) {
+            if (compressed_data_len) compressed_data_len -= 2;
+            r = handle_marker(fp_jfif, fgetc(fp_jfif), &data_pos);
+            if (r == EOF || r == 1) break;
+        } else if (compressed_data) { 
+            compressed_data[data_pos++] = byte;
+        }
+    }
+
+    #if JFIF_DEBUG == 1
+    printb(compressed_data, compressed_data_len, 0, 64);
+    #endif
+
+    fclose(fp_jfif);
+
     return 0;
 }
 

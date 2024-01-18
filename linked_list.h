@@ -1,3 +1,6 @@
+#ifndef LINKED_LIST_H
+#define LINKED_LIST_H
+
 #include <stdlib.h>
 
 typedef struct node {
@@ -52,10 +55,60 @@ void *list_at(List *list, int index)
     return i_node->data;
 }
 
-void list_free(List *list)
+int list_remove_obj(List *l1, void* obj)
 {
-    while (list->size) {
-        list_pop(list);
+    if (!l1->size) return 1;
+    
+    Node *list_iter = l1->head; 
+    if ((void*)list_iter->data == obj) {
+        l1->head = list_iter->next; 
+        free(list_iter->data);
+        free(list_iter);
+        l1->size--;
+        return 0;
     }
-    free(list);
+
+    for (int i = 0; i < l1->size - 1; ++i) {
+        if ((void*)list_iter->next->data == obj) {
+            Node *tmp = list_iter->next;
+            list_iter->next = list_iter->next->next;
+            free(tmp->data);
+            free(tmp);
+            l1->size--;
+            return 0;
+        }
+        list_iter = list_iter->next;
+    }
+
+    return 1;
 }
+
+void list_free(List *l1)
+{
+    while (l1->size) {
+        list_pop(l1);
+    }
+    free(l1);
+}
+
+void list_full_free(List *l1)
+{
+    while (l1->size) {
+        free(list_pop(l1));
+    }
+    free(l1);
+}
+
+/* Concatenate two lists */
+int list_cat(List *l1, List *l2)
+{
+    for (int i = 0; i < l2->size; ++i) {
+        void *code = list_at(l2, i);
+        list_append(l1, code);
+    }
+    list_free(l2);
+
+    return 0;
+}
+
+#endif
