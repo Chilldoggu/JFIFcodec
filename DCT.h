@@ -5,15 +5,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// #define PTRTOARR(ARR, N, M, PTR) do{        \
-//         for (size_t i = 0; i < N; i++) {    \
-//             for (size_t j = 0; j < M; j++)  \
-//                 ARR[i][j] = PTR[i][j];      \
-//             free(PTR[i]);                   \
-//         }                                   \
-//         free(PTR);                          \
-//         } while (0);
-
 #define FREE_MATRIX(MATRIX, N) do { \
         for (int i = 0; i < N; ++i) \
             free(MATRIX[i]);        \
@@ -27,9 +18,6 @@ int init_DCT()
     M = (double**)malloc(sizeof(double*)*8);
     for (size_t i = 0; i < 8; i++) {
         M[i] = (double*)malloc(sizeof(double)*8);
-        M[0][i] = 1/sqrt(8);
-    }
-    for (size_t i = 0; i < 8; i++) {
         for (size_t j = 0; j < 8; j++) {
             M[i][j] = (i != 0) ? 1./2.*cos((i+i*2*j)/16.*M_PI) : 1/sqrt(8);
         }
@@ -201,10 +189,10 @@ unsigned char *zigzag_decode_q(unsigned char *bytes)
     /* Decode 64 byte table of quantization values into array */
     unsigned char *Q = (unsigned char*)malloc(sizeof(unsigned char)*64);
 
-    int n = 3, m = 2;
+    /* save data stream as zigzag pattern in MxN array */
+    int n = 8, m = 8;
     while (iter != n*m) {
         Q_tmp[i][j] = bytes[iter];
-        // Q_tmp[i][j] = iter;
         if (!loop_up && !loop_down) {
             if (i == 0 && j < m || i == n-1) {
                 j++;
@@ -237,11 +225,8 @@ unsigned char *zigzag_decode_q(unsigned char *bytes)
     }
 
     for (size_t i = 0; i < 8; i++)
-        for (size_t j = 0; j < 8; j++) {
+        for (size_t j = 0; j < 8; j++)
             Q[i*8+j] = Q_tmp[i][j];
-            // printf("%3d%c", Q_tmp[i][j], (j == 7) ? '\n' : ' ');
-        }
-    // printf("\n");
 
     return Q;
 }

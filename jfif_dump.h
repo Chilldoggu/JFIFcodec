@@ -3,7 +3,7 @@
 
 #include "stdlib.h"
 #include "stdio.h"
-#include "huffman.h"
+#include "linked_list.h"
 
 #define APPEND_LIST(OBJ, OBJ_TYPE, MARKER_TYPE, NEW_STRUCT) do { \
             OBJ_TYPE *ptr = OBJ->next;                           \
@@ -16,15 +16,13 @@
         } while (0);
 
 #define CONSOLE_OUT 1
-#define JFIF_DBUG 0
+#define JFIF_DBUG 1
 
 /*****************
 *   PROTOTYPES   *
 *****************/
 
-extern char* decode(char *f_in);
-extern char* decompress_data(FILE *fp_in, char char_table[], CodeObj *codes[], char code_counts[], int table_size);
-extern void print_code_val(unsigned int val, int len);
+ ;
 
 /************
 *   TYPES   *
@@ -67,6 +65,7 @@ typedef struct {
 typedef struct dht {
     B08 marker;
     B16 len;
+    B08 table_amount;
     HTABLE *tables;
 } DHT;
 
@@ -80,6 +79,11 @@ typedef struct sos {
     B08 succApprox;
     B32 dataLen;
 } SOS;
+
+typedef struct generic_marker {
+    B08 marker;
+    void *body;
+} GENERIC_MARKER;
 
 /**************
 *   GLOBALS   *
@@ -128,10 +132,10 @@ struct app0 {
     B08 *Thumbnail;
 } APP0;
 
-
 struct dqt {
     B08 marker;
     B16 len;
+    B08 table_amount;
     QTABLE *tables;
 } DQT;
 
@@ -149,17 +153,156 @@ struct sof {
 *   FUNCTIONS   *
 ****************/
 
-void printb(B08 *c, int n, int tabs, int width)
+void printb(FILE *stream, B08 *c, int n, int tabs, int width)
 {
     int len = n;
     for (int i = 0; i < (n / width) + 1; ++i) {
         for (int j = 0; j < tabs; ++j) {
-            printf("\t");
+            fprintf(stream, "\t");
         }
         for (int k = 0; k < width && len != 0; ++k, --len) {
-            printf(" %02x", (B08)c[i*width + k]);
+            fprintf(stream, " %02x", (B08)c[i*width + k]);
         }
-        if (len != 0) printf("\n");
+        if (len != 0) fprintf(stream, "\n");
+    }
+}
+
+void print_markers(FILE *stream, GENERIC_MARKER *markers, int n)
+{
+    for (size_t i = 0; i < n; i++) {
+        switch (markers[i].marker)
+        {
+        case 0xE0:
+            int thumbnail_len = APP0.len - 16;
+            fprintf(stream, "APP0 (%02x):\n\t", APP0.marker); 
+            fprintf(stream, "Length: %d\n\t", APP0.len); 
+            fprintf(stream, "ID:"); printb(stream, APP0.id, 5, 0, 8); printf("\n\t");
+            fprintf(stream, "Version:"); printb(stream, APP0.version, 2, 0, 8); printf("\n\t"); 
+            fprintf(stream, "Units: %d\n\t", APP0.units);
+            fprintf(stream, "Xdensity: %d\n\t", APP0.Xdensity);
+            fprintf(stream, "Ydensity: %d\n\t", APP0.Ydensity);
+            fprintf(stream, "Xthumbnail: %d\n\t", APP0.Xthumbnail);
+            fprintf(stream, "Ythumbnail: %d\n\t", APP0.Ythumbnail);
+            fprintf(stream, "Thumbnail: ");
+            if (APP0.Thumbnail) {
+                fprintf(stream, "\n");
+                printb(stream, APP0.Thumbnail, thumbnail_len, 1, 8);
+            } else {
+                fprintf(stream, "None");
+            }
+            fprintf(stream, "\n");
+            break;
+        
+        case 0xDD:
+            fprintf(stream, "DRI:\n\tLength: %u\n\tInterval: %u\n", DRI.len, DRI.interval);
+            break;
+
+        case 0xC4:
+            DHT* DHT_body = (DHT*)markers[i].body;
+            fprintf(stream, "DHT (%02x):\n\t", DHT_body->marker);
+            fprintf(stream, "Length: %d\n", DHT_body->len);
+            for (int k = 0; k < DHT_body->table_amount; ++k) {
+                HTABLE table = DHT_body->tables[k];
+                fprintf(stream, "\tTable type: ");
+                if (table.tableType == 0) fprintf(stream, "DC\n\t");
+                else if (table.tableType == 1) fprintf(stream, "AC\n\t");
+                fprintf(stream, "Table id: %d\n\t", table.tableId); 
+                fprintf(stream, "Table code lengths:\n"); printb(stream, table.codeLens, 16, 2, 8);
+                fprintf(stream, "\n\tTable symbols:\n"); printb(stream, table.codeSymbols, table.codeSum, 2, 16);
+                fprintf(stream, "\n");
+
+                if (k+1 != DHT_body->table_amount) fprintf(stream, "\n");
+            }
+            break;
+        
+        case 0xFE:
+            fprintf(stream, "COM:\n\tText:%s", COM.text);
+            break;
+        
+        case 0xDB:
+            fprintf(stream, "DQT (%02x):\n\t", DQT.marker);
+            fprintf(stream, "Length: %d\n", DQT.len);
+            for (int k = 0; k < DQT.table_amount; ++k) {
+                QTABLE table = DQT.tables[k];
+                fprintf(stream, "\tTable id: %d\n\t", table.tableId);
+                fprintf(stream, "Table size: %d\n\t", table.valSize);
+                fprintf(stream, "Table values:\n"); printb(stream, table.qVals, table.valSize, 2, 16);
+                fprintf(stream, "\n");
+                if (k+1 != DQT.table_amount) fprintf(stream, "\n");
+            }
+            break;
+
+        case 0xC0:
+            fprintf(stream, "SOF (%02x):\n\t", SOF0.marker);
+            fprintf(stream, "Length: %d\n\t", SOF0.len);
+            fprintf(stream, "Precision: %d\n\t", SOF0.precision);
+            fprintf(stream, "Height: %d\n\t", SOF0.height);
+            fprintf(stream, "Width: %d\n\t", SOF0.width);
+            fprintf(stream, "Number of components: %d\n", SOF0.Ncomp);
+            for (int j = 0; j < SOF0.Ncomp; ++j) {
+                switch (SOF0.compDesc[j].id)
+                {
+                case 1:
+                    fprintf(stream, "\tComponent Y:\n\t");
+                    break;
+                
+                case 2:
+                    fprintf(stream, "\tComponent Cb:\n\t");
+                    break;
+                
+                case 3:
+                    fprintf(stream, "\tComponent Cr:\n\t");
+                    break;
+                
+                default:
+                    fprintf(stream, "Unknown component number %d in SOF0\n", SOF0.compDesc[j].id);
+                    exit(1);
+                    break;
+                }
+
+                fprintf(stream, "   H frequency: %d\n\t", SOF0.compDesc[j].Hfreq);
+                fprintf(stream, "   V frequency: %d\n\t", SOF0.compDesc[j].Yfreq);
+                fprintf(stream, "   DQT ID: %d\n", SOF0.compDesc[j].dqtId);
+            }
+            break;
+
+        case 0xDA:
+            SOS *SOS_body = (SOS*)markers[i].body;
+            fprintf(stream, "SOS (%02x):\n\t", SOS_body->marker);
+            fprintf(stream, "Length: %d\n\t", SOS_body->len);
+            fprintf(stream, "Number of componenets: %d\n", SOS_body->Ncomp);
+            for (int j = 0; j < SOS_body->Ncomp; ++j) {
+                switch (SOS_body->compDesc[j].id)
+                {
+                case 1:
+                    fprintf(stream, "\tComponent Y:\n\t");
+                    break;
+                
+                case 2:
+                    fprintf(stream, "\tComponent Cb:\n\t");
+                    break;
+                
+                case 3:
+                    fprintf(stream, "\tComponent Cr:\n\t");
+                    break;
+                
+                default:
+                    fprintf(stream, "Unknown component number %d in SOS\n", SOS_body->compDesc[j].id);
+                    exit(1);
+                    break;
+                }
+                fprintf(stream, "   DC Id: %d\n\t", SOS_body->compDesc[j].dcId);
+                fprintf(stream, "   AC Id: %d\n", SOS_body->compDesc[j].acId);
+            }
+            fprintf(stream, "\tSpectral start: %d\n\t", SOS_body->spectralStart);
+            fprintf(stream, "Spectral end: %d\n\t", SOS_body->spectralEnd);
+            fprintf(stream, "Successive approximation: %d\n", SOS_body->succApprox);
+            break;
+        
+        default:
+            fprintf(stream, "Unhandled marker: %02x\n", markers[i].marker);
+            break;
+        }
     }
 }
 
@@ -187,7 +330,8 @@ int init_DRI(FILE *fp_jfif, B16 len)
     DRI.interval = b_to_int(buf, 2);
 
     #if CONSOLE_OUT == 1
-    printf("DRI:\n\tLength: %u\n\tInterval: %u\n", DRI.len, DRI.interval);
+    GENERIC_MARKER marker = {DRI.marker, &DRI};
+    print_markers(stdout, &marker, 1);
     #endif
     
     return 0;
@@ -201,7 +345,8 @@ int init_COM(FILE *fp_jfif, B16 len)
     fread(COM.text, len, 1, fp_jfif);
 
     #if CONSOLE_OUT == 1
-    printf("COM:\n\tText:%s", COM.text);
+    GENERIC_MARKER marker = {COM.marker, &COM};
+    print_markers(stdout, &marker, 1);
     #endif
 
     return 0;
@@ -263,23 +408,8 @@ int init_APP0(FILE *fp_jfif, B16 len)
     }
 
     #if CONSOLE_OUT == 1
-    printf("APP0 (%02x):\n\t", APP0.marker); 
-    printf("Length: %d\n\t", APP0.len); 
-    printf("ID:"); printb(APP0.id, 5, 0, 8); printf("\n\t");
-    printf("Version:"); printb(APP0.version, 2, 0, 8); printf("\n\t"); 
-    printf("Units: %d\n\t", APP0.units);
-    printf("Xdensity: %d\n\t", APP0.Xdensity);
-    printf("Ydensity: %d\n\t", APP0.Ydensity);
-    printf("Xthumbnail: %d\n\t", APP0.Xthumbnail);
-    printf("Ythumbnail: %d\n\t", APP0.Ythumbnail);
-    printf("Thumbnail: ");
-    if (APP0.Thumbnail) {
-        printf("\n");
-        printb(APP0.Thumbnail, thumbnail_len, 1, 8);
-    } else {
-        printf("None");
-    }
-    printf("\n");
+    GENERIC_MARKER marker = {APP0.marker, &APP0};
+    print_markers(stdout, &marker, 1);
     #endif
 
     return 0;
@@ -323,23 +453,12 @@ int init_DHT(FILE *fp_jfif, DHT *mr_DHT, B16 len)
         }
 
         ++j;
+        mr_DHT->table_amount++;
     }
 
     #if CONSOLE_OUT == 1
-    printf("DHT (%02x):\n\t", mr_DHT->marker);
-    printf("Length: %d\n", mr_DHT->len);
-    for (int k = 0; k < j; ++k) {
-        HTABLE table = mr_DHT->tables[k];
-        printf("\tTable type: ");
-        if (table.tableType == 0) printf("DC\n\t");
-        else if (table.tableType == 1) printf("AC\n\t");
-        printf("Table id: %d\n\t", table.tableId); 
-        printf("Table code lengths:\n"); printb(table.codeLens, 16, 2, 8);
-        printf("\n\tTable symbols:\n"); printb(table.codeSymbols, table.codeSum, 2, 16);
-        printf("\n");
-
-        if (k+1 != j) printf("\n");
-    }
+    GENERIC_MARKER marker = {mr_DHT->marker, mr_DHT};
+    print_markers(stdout, &marker, 1);
     #endif
 
     return 0;
@@ -370,19 +489,12 @@ int init_DQT(FILE *fp_jfif, B16 len)
         }
 
         ++j;
+        DQT.table_amount++;
     }
 
     #if CONSOLE_OUT == 1
-    printf("DQT (%02x):\n\t", DQT.marker);
-    printf("Length: %d\n", DQT.len);
-    for (int k = 0; k < j; ++k) {
-        QTABLE table = DQT.tables[k];
-        printf("\tTable id: %d\n\t", table.tableId);
-        printf("Table size: %d\n\t", table.valSize);
-        printf("Table values:\n"); printb(table.qVals, table.valSize, 2, 16);
-        printf("\n");
-        if (k+1 != j) printf("\n");
-    }
+    GENERIC_MARKER marker = {DQT.marker, &DQT};
+    print_markers(stdout, &marker, 1);
     #endif
 
     return 0;
@@ -437,37 +549,8 @@ int init_SOF0(FILE *fp_jfif, B16 len)
     }
 
     #if CONSOLE_OUT == 1
-    printf("SOF (%02x):\n\t", SOF0.marker);
-    printf("Length: %d\n\t", SOF0.len);
-    printf("Precision: %d\n\t", SOF0.precision);
-    printf("Height: %d\n\t", SOF0.height);
-    printf("Width: %d\n\t", SOF0.width);
-    printf("Number of components: %d\n", SOF0.Ncomp);
-    for (int j = 0; j < SOF0.Ncomp; ++j) {
-        switch (SOF0.compDesc[j].id)
-        {
-        case 1:
-            printf("\tComponent Y:\n\t");
-            break;
-        
-        case 2:
-            printf("\tComponent Cb:\n\t");
-            break;
-        
-        case 3:
-            printf("\tComponent Cr:\n\t");
-            break;
-        
-        default:
-            printf("Unknown component number %d in SOF0\n", SOF0.compDesc[j].id);
-            exit(1);
-            break;
-        }
-
-        printf("   H frequency: %d\n\t", SOF0.compDesc[j].Hfreq);
-        printf("   Y frequency: %d\n\t", SOF0.compDesc[j].Yfreq);
-        printf("   DQT ID: %d\n", SOF0.compDesc[j].dqtId);
-    }
+    GENERIC_MARKER marker = {SOF0.marker, &SOF0};
+    print_markers(stdout, &marker, 1);
     #endif
 
     return 0;
@@ -516,37 +599,8 @@ int init_SOS(FILE *fp_jfif, SOS *mr_SOS, B16 len)
     mr_SOS->succApprox = buf[i++];
 
     #if CONSOLE_OUT == 1
-    printf("SOS (%02x):\n\t", mr_SOS->marker);
-    printf("Length: %d\n\t", mr_SOS->len);
-    printf("Number of componenets: %d\n", mr_SOS->Ncomp);
-    for (int j = 0; j < mr_SOS->Ncomp; ++j) {
-        switch (mr_SOS->compDesc[j].id)
-        {
-        case 1:
-            printf("\tComponent Y:\n\t");
-            break;
-        
-        case 2:
-            printf("\tComponent Cb:\n\t");
-            break;
-        
-        case 3:
-            printf("\tComponent Cr:\n\t");
-            break;
-        
-        default:
-            printf("Unknown component number %d in SOS\n", mr_SOS->compDesc[j].id);
-            exit(1);
-            break;
-        }
-
-        printf("   DC Id: %d\n\t", mr_SOS->compDesc[j].dcId);
-        printf("   AC Id: %d\n", mr_SOS->compDesc[j].acId);
-    }
-
-    printf("\tSpectral start: %d\n\t", mr_SOS->spectralStart);
-    printf("Spectral end: %d\n\t", mr_SOS->spectralEnd);
-    printf("Successive approximation: %d\n", mr_SOS->succApprox);
+    GENERIC_MARKER marker = {mr_SOS->marker, mr_SOS};
+    print_markers(stdout, &marker, 1);
     #endif
 
     return 0;
@@ -665,9 +719,8 @@ int handle_loop(char* filename)
         }
     }
 
-    #if JFIF_DEBUG == 1
-    printb(compressed_data, compressed_data_len, 0, 64);
-    #endif
+    FILE *fp_comp = fopen("compressed.txt", "w");
+    fwrite(compressed_data, 1, compressed_data_len, fp_comp);
 
     fclose(fp_jfif);
 

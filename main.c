@@ -1,17 +1,68 @@
 #include "jfif_dump.h"
 #include "DCT.h"
+#include "huffman.h"
 #include <stdlib.h>
 #include <stdio.h>
 
-#define DEBUG(txt) printf(txt"\n")
+int last_dc = 0;
+
+int extend(int magnitude, int additional)
+{
+    int vt = 1 << (magnitude - 1);
+    if (vt > additional) {
+        return additional + (-1 << magnitude) + 1;
+    }
+    return additional;
+}
+
+void decode_JFIF(char *f_in, HTABLE* h_table)
+{
+    FILE *fp_in = fopen(f_in, "rb");
+
+    CodeObj *codes[h_table->codeSum];
+    for (int i = 0; i < h_table->codeSum; i++) {
+        codes[i] = malloc(sizeof(CodeObj));
+        codes[i]->c = h_table->codeSymbols[i];
+    }
+
+    get_code_lens_from_counts(codes, h_table->codeLens);
+    get_code_vals(codes, h_table->codeSum);
+}
 
 int main(int argc, char*argv[])
 {
+    if (argc < 2) {
+        printf("No filename argument\n");
+        exit(1);
+    }
     char *filename = argv[1];
-    // handle_loop(filename);
+    handle_loop(filename);
     init_DCT();
-    zigzag_decode_q("");
+    
+    return 0;
+}
 
+/*
+===== TRASH =====
+{
+    GENERIC_MARKER arr[DHT_list->size+1];
+    {
+        size_t i = 0;
+        for (; i < DHT_list->size; i++) {
+            DHT *DHT_body = (DHT*)list_at(DHT_list, i);
+            arr[i].marker = DHT_body->marker;
+            arr[i].body = DHT_body;
+        }
+        arr[i].marker = DQT.marker;
+        arr[i].body = &DQT;
+    }
+
+    FILE *fp_tables = fopen("tables.txt", "w");
+    print_markers(fp_tables, arr, DHT_list->size+1);
+    fclose(fp_tables);
+}
+
+{
     // Sample Y component
     int V_reference[8][8] = {
         {58,  45,  29,  27, 24, 19, 17, 20},
@@ -25,71 +76,30 @@ int main(int argc, char*argv[])
     };
 
     unsigned char Q_Y_ref[64] = {16, 11, 10, 16, 24,  40,  51,  61, 12, 12, 14, 19, 26,  58,  60,  55 ,14, 13, 16, 24, 40,  57,  69,  56 ,14, 17, 22, 29, 51,  87,  80,  62 ,18, 22, 37, 56, 68,  109, 103, 77 ,24, 35, 55, 64, 81,  104, 113, 92, 49, 64, 78, 87, 103, 121, 120, 101 ,72, 92, 95, 98, 112, 100, 103, 99};
-
-    double **V_in = (double**)malloc((sizeof(double*)*8));
-    for (size_t i = 0; i < 8; i++) {
-        V_in[i] = (double*)malloc((sizeof(double)*8));
-        for (size_t j = 0; j < 8; j++)
-            V_in[i][j] = V_reference[i][j];
-    }
-    
-    /* Get DCT coefficients after quantization */
-    double **T = DCT_2dim((double**)V_in, Q_Y_ref);
-
-    for (size_t i = 0; i < 8; i++)
-        for (size_t j = 0; j < 8; j++)
-            printf("%4.0f%c", T[i][j], (j == 7) ? '\n' : ' ');
-    printf("\n");
-
-    /* Get Y component from DCT coefficients after dequantization */
-    double **V = IDCT_2dim(T, Q_Y_ref);
-
-    for (size_t i = 0; i < 8; i++)
-        for (size_t j = 0; j < 8; j++)
-            printf("%4.0f%c", V[i][j], (j == 7) ? '\n' : ' ');
-    
-    /* Clear */
-    FREE_MATRIX(T, 8);
-    FREE_MATRIX(V, 8);
-    FREE_MATRIX(V_in, 8);
-
-    return 0;
 }
 
-// int main(int argc, char *argv[])
-// {
-//     if (argc < 2) {
-//         printf("No filename argument\n");
-//         exit(1);
-//     }
-//     char *filename = argv[1];
-//     handle_loop(filename);
-// 
-//     return 0;
-// }
 
-/*
-===== TRASH =====
-
-int main(int argc, char *argv[])
 {
-    char *input;
-    if (argc > 1) {
-        input = argv[1];
-    } else {
-        input = "A MAN A PLAN A CANAL PANAMA";
+    int main(int argc, char *argv[])
+    {
+        char *input;
+        if (argc > 1) {
+            input = argv[1];
+        } else {
+            input = "A MAN A PLAN A CANAL PANAMA";
+        }
+
+        char *f_out = "encode";
+        int input_size = 0;
+
+        while (input[input_size++] != '\0');
+
+        encode(f_out, input, input_size);
+        char *decompressed_data = decode(f_out);
+
+        free(decompressed_data);
+        return 0;
     }
-
-    char *f_out = "encode";
-    int input_size = 0;
-
-    while (input[input_size++] != '\0');
-
-    encode(f_out, input, input_size);
-    char *decompressed_data = decode(f_out);
-
-    free(decompressed_data);
-    return 0;
 }
 
 */

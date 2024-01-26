@@ -80,9 +80,9 @@ static char find_dummy(char *input);
 static char *append_dummy(char *input, int input_size, char dummy);
 static List *get_code_lens_from_input(char *input);
 static int sort_code_arr_by_len(CodeObj *code_arr[], const int size, char dummy);
-static int get_code_vals(CodeObj *code_arr[], const int size);
+int get_code_vals(CodeObj *code_arr[], const int size);
 static unsigned char *get_code_counts(CodeObj *code_arr[], const int size);
-static int get_code_lens_from_counts(CodeObj *code_arr[], char *code_counts);
+int get_code_lens_from_counts(CodeObj *code_arr[], char *code_counts);
 
 /****************
 *   FUNCTIONS   *
@@ -497,7 +497,7 @@ static int sort_code_arr_by_len(CodeObj *code_arr[], const int size, char dummy)
     return 0;
 }
 
-static int get_code_vals(CodeObj *code_arr[], const int size)
+int get_code_vals(CodeObj *code_arr[], const int size)
 {
     short huffman_code = 0;
     unsigned char code_len_counter = 1;
@@ -531,7 +531,7 @@ static unsigned char *get_code_counts(CodeObj *code_arr[], const int size)
     return counts;
 }
 
-static int get_code_lens_from_counts(CodeObj *code_arr[], char *code_counts)
+int get_code_lens_from_counts(CodeObj *code_arr[], char *code_counts)
 {
     int index = 0;
     for (int i = 0; i < MAX_CODE_LEN; ++i) {
