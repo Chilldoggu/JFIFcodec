@@ -1,43 +1,26 @@
-#include "jfif_dump.h"
-#include "DCT.h"
-#include "huffman.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include "jfif_dump.h"
+#include "jfif_huffman.h"
+#include "DCT.h"
 
 int last_dc = 0;
 
-int extend(int magnitude, int additional)
-{
-    int vt = 1 << (magnitude - 1);
-    if (vt > additional) {
-        return additional + (-1 << magnitude) + 1;
-    }
-    return additional;
-}
-
-void decode_JFIF(char *f_in, HTABLE* h_table)
-{
-    FILE *fp_in = fopen(f_in, "rb");
-
-    CodeObj *codes[h_table->codeSum];
-    for (int i = 0; i < h_table->codeSum; i++) {
-        codes[i] = malloc(sizeof(CodeObj));
-        codes[i]->c = h_table->codeSymbols[i];
-    }
-
-    get_code_lens_from_counts(codes, h_table->codeLens);
-    get_code_vals(codes, h_table->codeSum);
-}
-
 int main(int argc, char*argv[])
 {
+
     if (argc < 2) {
         printf("No filename argument\n");
         exit(1);
     }
     char *filename = argv[1];
     handle_loop(filename);
+
     init_DCT();
+    printf("%d\n", SOF0.Ncomp);
+    if (init_huffman("test", &SOF0)) {
+        printf("Error while processing init_huffman().\n");
+    }
     
     return 0;
 }

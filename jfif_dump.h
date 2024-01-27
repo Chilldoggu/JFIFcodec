@@ -22,7 +22,7 @@
 *   PROTOTYPES   *
 *****************/
 
- ;
+;
 
 /************
 *   TYPES   *
@@ -32,8 +32,7 @@ typedef unsigned char B08;
 typedef unsigned int  B16;
 typedef unsigned int  B32;
 
-typedef struct dhtTable
-{
+typedef struct {
     B08 tableType;
     B08 tableId;
     B08 codeLens[16];
@@ -41,8 +40,7 @@ typedef struct dhtTable
     B08 *codeSymbols;
 } HTABLE; // Huffman table
 
-typedef struct dqtTable
-{
+typedef struct dqtTable {
     B08 tableId;
     B08 valSize;
     B08 *qVals;
@@ -52,7 +50,7 @@ typedef struct {
     B08 id;
     B08 sampFreq;
     B08 Hfreq;
-    B08 Yfreq;
+    B08 Vfreq;
     B08 dqtId;
 } SOFDESC;
 
@@ -261,7 +259,7 @@ void print_markers(FILE *stream, GENERIC_MARKER *markers, int n)
                 }
 
                 fprintf(stream, "   H frequency: %d\n\t", SOF0.compDesc[j].Hfreq);
-                fprintf(stream, "   V frequency: %d\n\t", SOF0.compDesc[j].Yfreq);
+                fprintf(stream, "   V frequency: %d\n\t", SOF0.compDesc[j].Vfreq);
                 fprintf(stream, "   DQT ID: %d\n", SOF0.compDesc[j].dqtId);
             }
             break;
@@ -536,7 +534,7 @@ int init_SOF0(FILE *fp_jfif, B16 len)
                     comp.id       = buf[j*3+0+i];
                     comp.sampFreq = buf[j*3+0+i];
                     comp.Hfreq    = buf[j*3+1+i] >> 4;
-                    comp.Yfreq    = buf[j*3+1+i] & (0x0F);
+                    comp.Vfreq    = buf[j*3+1+i] & (0x0F);
                     comp.dqtId    = buf[j*3+2+i];
                     SOF0.compDesc[j] = comp;
                 }
